@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --x: #ff3d71;
+  --o: #00d4ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  background: #07070f;
+  color: #f0f0ff;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Animated grid background */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(99, 102, 241, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: center center;
+}
+
+/* Radial spotlight */
+.bg-spotlight {
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(99, 102, 241, 0.12) 0%, transparent 70%);
+}
+
+/* Glow utilities */
+.glow-x {
+  box-shadow: 0 0 24px rgba(255, 61, 113, 0.5), 0 0 48px rgba(255, 61, 113, 0.2);
+}
+.glow-o {
+  box-shadow: 0 0 24px rgba(0, 212, 255, 0.5), 0 0 48px rgba(0, 212, 255, 0.2);
+}
+.glow-primary {
+  box-shadow: 0 0 24px rgba(99, 102, 241, 0.5), 0 0 48px rgba(99, 102, 241, 0.2);
+}
+
+/* Font shorthand */
+.font-game {
+  font-family: "Orbitron", monospace;
+  letter-spacing: 0.05em;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1e1e3a; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #6366f1; }

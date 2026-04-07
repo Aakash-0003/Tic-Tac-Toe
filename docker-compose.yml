@@ -1,0 +1,59 @@
+version: '3'
+services:
+
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${DB_USER}", "-d", "${DB_NAME}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  nakama:
+    image: registry.heroiclabs.com/heroiclabs/nakama:3.22.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint:
+      - "/bin/sh"
+      - "-c"
+      - >
+        /nakama/nakama migrate up --database.address ${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+        && /nakama/nakama
+        --database.address ${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+        --socket.server_key ${NAKAMA_SERVER_KEY}
+        --runtime.js_entrypoint index.js
+    ports:
+      - "7349:7349"
+      - "7350:7350"
+      - "7351:7351"
+    volumes:
+      - ./build:/nakama/data/modules
+    restart: on-failure
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      - VITE_NAKAMA_KEY=${VITE_NAKAMA_KEY}
+      - VITE_NAKAMA_HOST=${VITE_NAKAMA_HOST}
+      - VITE_NAKAMA_PORT=${VITE_NAKAMA_PORT}
+    depends_on:
+      - nakama
+
+volumes:
+  postgres_data:
