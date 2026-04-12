@@ -122,100 +122,108 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const deviceId = getOrCreateDeviceId();
     const username = `Player_${deviceId.slice(0, 6).toUpperCase()}`;
 
-    try {
-      const session = await client.authenticateDevice(deviceId, true, username);
-      const socket = client.createSocket(SERVER_SSL, false);
+    const MAX_RETRIES = 3;
 
-      socket.onmatchmakermatched = async (matched) => {
-        const joinId = matched.match_id ?? matched.token;
-        if (!joinId) {
-          set({ error: "Matchmaker: no match ID received", screen: "lobby" });
-          return;
-        }
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const session = await client.authenticateDevice(deviceId, true, username);
+        const socket = client.createSocket(SERVER_SSL, false);
 
-        set({ ...freshGame(), screen: "game", matchmakerTicket: null });
-        try {
-          const match = await socket.joinMatch(joinId);
-          set({ matchId: match.match_id });
-        } catch (e) {
-          set({ error: `Failed to join matched game: ${e}`, screen: "lobby" });
-        }
-      };
+        socket.onmatchmakermatched = async (matched) => {
+          const joinId = matched.match_id ?? matched.token;
+          if (!joinId) {
+            set({ error: "Matchmaker: no match ID received", screen: "lobby" });
+            return;
+          }
 
-      socket.onmatchdata = (data) => {
-        // data.data can be Uint8Array or base64 string depending on SDK version
-        let raw: string;
-        if (typeof data.data === "string") {
-          raw = data.data;
+          set({ ...freshGame(), screen: "game", matchmakerTicket: null });
+          try {
+            const match = await socket.joinMatch(joinId);
+            set({ matchId: match.match_id });
+          } catch (e) {
+            set({ error: `Failed to join matched game: ${e}`, screen: "lobby" });
+          }
+        };
+
+        socket.onmatchdata = (data) => {
+          // data.data can be Uint8Array or base64 string depending on SDK version
+          let raw: string;
+          if (typeof data.data === "string") {
+            raw = data.data;
+          } else {
+            raw = new TextDecoder().decode(data.data);
+          }
+          let payload: unknown;
+          try {
+            payload = JSON.parse(raw);
+          } catch {
+            return;
+          }
+
+          // op_code may be a string over the wire — coerce to number for switch
+          switch (Number(data.op_code)) {
+            case OPCODES.STATE_UPDATE: {
+              const p = payload as StateUpdatePayload;
+              set({
+                board: p.board,
+                currentTurn: p.currentTurn,
+                phase: p.phase,
+                playerX: p.playerX,
+                playerO: p.playerO,
+              });
+              break;
+            }
+            case OPCODES.GAME_OVER: {
+              const p = payload as GameOverPayload;
+              set({
+                board: p.board,
+                playerX: p.playerX,
+                playerO: p.playerO,
+                winner: p.winner,
+                isDraw: p.isDraw,
+                gameOverReason: p.reason,
+                phase: "game_over",
+              });
+              break;
+            }
+            case OPCODES.TIMER_UPDATE: {
+              const p = payload as TimerPayload;
+              set({ timer: p.remaining });
+              break;
+            }
+            case OPCODES.ERROR: {
+              const p = payload as { reason: string };
+              set({ error: p.reason });
+              break;
+            }
+          }
+        };
+
+        socket.ondisconnect = () => {
+          set({ isConnected: false, error: "Disconnected from server", screen: "lobby" });
+        };
+
+        await socket.connect(session, true);
+
+        set({
+          client,
+          session,
+          socket,
+          isConnected: true,
+          myUserId: session.user_id,
+          myUsername: session.username || username,
+        });
+        return;
+      } catch {
+        if (attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
         } else {
-          raw = new TextDecoder().decode(data.data);
+          set({ error: "Could not connect to server — please try again." });
         }
-        let payload: unknown;
-        try {
-          payload = JSON.parse(raw);
-        } catch {
-          return;
-        }
-
-        // op_code may be a string over the wire — coerce to number for switch
-        switch (Number(data.op_code)) {
-          case OPCODES.STATE_UPDATE: {
-            const p = payload as StateUpdatePayload;
-            set({
-              board: p.board,
-              currentTurn: p.currentTurn,
-              phase: p.phase,
-              playerX: p.playerX,
-              playerO: p.playerO,
-            });
-            break;
-          }
-          case OPCODES.GAME_OVER: {
-            const p = payload as GameOverPayload;
-            set({
-              board: p.board,
-              playerX: p.playerX,
-              playerO: p.playerO,
-              winner: p.winner,
-              isDraw: p.isDraw,
-              gameOverReason: p.reason,
-              phase: "game_over",
-            });
-            break;
-          }
-          case OPCODES.TIMER_UPDATE: {
-            const p = payload as TimerPayload;
-            set({ timer: p.remaining });
-            break;
-          }
-          case OPCODES.ERROR: {
-            const p = payload as { reason: string };
-            set({ error: p.reason });
-            break;
-          }
-        }
-      };
-
-      socket.ondisconnect = () => {
-        set({ isConnected: false, error: "Disconnected from server", screen: "lobby" });
-      };
-
-      await socket.connect(session, true);
-
-      set({
-        client,
-        session,
-        socket,
-        isConnected: true,
-        myUserId: session.user_id,
-        myUsername: session.username || username,
-      });
-    } catch {
-      set({ error: "Could not connect to Nakama server — is Docker running?" });
+      }
     }
   },
 
-  // ── matchmaking
   findMatch: async () => {
     const { socket } = get();
     if (!socket) return;

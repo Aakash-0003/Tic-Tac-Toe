@@ -21,4 +21,5 @@ ENTRYPOINT DB=$(echo "$DATABASE_URL" | sed 's|^postgres[a-z]*://||') && \
       --socket.server_key "${NAKAMA_SERVER_KEY}" \
       --socket.address "0.0.0.0" \
       --socket.port "${PORT:-7350}" \
+      --session.token_expiry_sec 3600 \
       --runtime.js_entrypoint "index.js"
